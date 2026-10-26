@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日常チェックリスト</title>
+<style>
+  /* 色は「グレー系＋アクセント1色」のみ */
+  :root {
+    --bg: #f5f6f7;
+    --surface: #ffffff;
+    --line: #e2e4e7;
+    --text: #22262b;
+    --muted: #8a9099;
+    --accent: #2f855a;      /* 実行済みを表す色 */
+    --accent-soft: #e8f3ed; /* 実行済み行の背景 */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 16px;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  }
+  .app { max-width: 560px; margin: 0 auto; }
+  h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 4px; }
+  .summary { color: var(--muted); font-size: 0.85rem; margin: 0 0 20px; }
+
+  /* 一覧：4列のグリッドで縦横を揃える */
+  .list {
+    list-style: none; margin: 0; padding: 0;
+    background: var(--surface);
+    border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  }
+  /* 1行目：項目名、2行目：日時（2行目は常に確保して項目名の位置を固定） */
+  .row {
+    display: grid;
+    grid-template-columns: 24px 1fr 56px;
+    grid-template-rows: 22px 18px;
+    align-items: center; column-gap: 12px; row-gap: 2px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--line);
+    transition: background .2s;
+  }
+  .row:last-child { border-bottom: none; }
+  .row input[type="checkbox"] {
+    grid-column: 1; grid-row: 1;
+    width: 18px; height: 18px; margin: 0;
+    accent-color: var(--accent); cursor: pointer;
+  }
+  .row label { grid-column: 2; grid-row: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .time { grid-column: 2; grid-row: 2; font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row .del { grid-column: 3; grid-row: 1 / span 2; }
+
+  /* 実行済みの行 */
+  .row.done { background: var(--accent-soft); }
+  .row.done label { color: var(--accent); font-weight: 600; }
+  .row.done .time { color: var(--accent); }
+
+  /* ボタン類 */
+  button {
+    font: inherit; font-size: 0.85rem; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--text);
+    border-radius: 6px; height: 32px; padding: 0 12px;
+    transition: border-color .2s, color .2s;
+  }
+  button:hover { border-color: var(--text); }
+  .del { padding: 0; width: 56px; color: var(--muted); }
+  .del:hover { color: var(--text); }
+
+  .toolbar { display: flex; justify-content: flex-end; margin: 12px 0 24px; }
+
+  form { display: grid; grid-template-columns: 1fr 80px; gap: 12px; }
+  form input {
+    font: inherit; height: 40px; padding: 0 12px;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--surface);
+  }
+  form input:focus { outline: none; border-color: var(--accent); }
+  form button { height: 40px; background: var(--text); color: #fff; border-color: var(--text); }
+  form button:hover { opacity: .85; }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>日常チェックリスト</h1>
+  <p class="summary" id="summary"></p>
+
+  <ul class="list" id="list"></ul>
+
+  <div class="toolbar">
+    <button id="resetAll" type="button">全てのチェックをオフ</button>
+  </div>
+
+  <form id="addForm">
+    <input id="newName" type="text" placeholder="新しい項目名" required>
+    <button type="submit">追加</button>
+  </form>
+</div>
+
+<script>
+const KEY = "dailyCheckItems";
+const DEFAULT_ITEMS = ["鍵の施錠", "窓の施錠", "部屋の消灯"];
+
+// 項目データ：{ name: 項目名, checkedAt: チェック日時（文字列）または null }
+let items = load();
+
+function load() {
+  try {
+    const saved = localStorage.getItem(KEY);
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return DEFAULT_ITEMS.map(name => ({ name: name, checkedAt: null }));
+}
+
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(items)); } catch (e) {}
+}
+
+function render() {
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  items.forEach((item, i) => {
+    const done = item.checkedAt !== null;
+    const li = document.createElement("li");
+    li.className = "row" + (done ? " done" : "");
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.id = "item" + i;
+    cb.checked = done;
+    cb.addEventListener("change", () => {
+      // チェックON → 現在日時を記録、OFF → 記録を消去
+      item.checkedAt = cb.checked ? new Date().toLocaleString("ja-JP") : null;
+      save();
+      render();
+    });
+
+    const label = document.createElement("label");
+    label.htmlFor = cb.id;
+    label.textContent = item.name;
+
+    const time = document.createElement("span");
+    time.className = "time";
+    time.textContent = done ? item.checkedAt : "未実行";
+
+    const del = document.createElement("button");
+    del.className = "del";
+    del.type = "button";
+    del.textContent = "削除";
+    del.addEventListener("click", () => {
+      if (confirm("「" + item.name + "」を削除しますか？")) {
+        items.splice(i, 1);
+        save();
+        render();
+      }
+    });
+
+    li.append(cb, label, time, del);
+    list.appendChild(li);
+  });
+
+  const doneCount = items.filter(it => it.checkedAt !== null).length;
+  document.getElementById("summary").textContent =
+    "実行済み " + doneCount + " / " + items.length;
+}
+
+// 全てのチェックをオフ（項目は残し、日時の記録だけ消去）
+document.getElementById("resetAll").addEventListener("click", () => {
+  if (confirm("全てのチェックをオフにしますか？")) {
+    items.forEach(item => { item.checkedAt = null; });
+    save();
+    render();
+  }
+});
+
+document.getElementById("addForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const input = document.getElementById("newName");
+  const name = input.value.trim();
+  if (name) {
+    items.push({ name: name, checkedAt: null });
+    save();
+    render();
+    input.value = "";
+  }
+});
+
+render();
+</script>
+</body>
+</html>
